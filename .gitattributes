@@ -1,0 +1,9 @@
+# Patches must never be line-ending converted, or they stop applying
+# to the LF sources they target.
+*.patch -text
+
+*.php text eol=lf
+*.py  text eol=lf
+*.tpl text eol=lf
+*.md  text
+*.yml text eol=lf
