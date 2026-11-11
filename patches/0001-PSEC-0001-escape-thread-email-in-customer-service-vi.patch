@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PS17-SEC <patches@example.invalid>
+Date: Tue, 10 Nov 2026 12:00:00 +0000
+Subject: [PATCH] PSEC-0001: escape thread email in customer service view
+ (CVE-2026-44212)
+
+An unauthenticated visitor submits the public Contact Us form with a payload
+in the email field. It is stored, then rendered unescaped when a back-office
+employee opens the thread, giving session hijacking and back-office takeover.
+
+Two sites in the same template render $thread->email without escaping: the
+reply form heading and the hidden msg_email input. The <h2> thirty lines
+earlier in the same file already escapes it, which is what makes this an
+oversight rather than a convention.
+
+Backported from the upstream fix shipped in PrestaShop 8.2.6 and 9.1.1. The
+template change is identical; the escape filter and syntax are unchanged
+between 1.7 and 8.x.
+
+NOT backported: upstream also switched Validate::isEmail() from Symfony's
+'loose' to 'strict' email validation mode as defence in depth. PrestaShop 1.7
+does not use Symfony's validator there. It uses egulias/EmailValidator with
+RFCValidation and SwiftMailerValidation, which has no equivalent mode switch.
+Tightening it would mean choosing a different validation strategy, which is a
+behaviour change affecting every email field on the site, not a backport. See
+advisories/PSEC-0001.md.
+
+Advisory: https://github.com/advisories/GHSA-w9f3-qc75-qgx9
+---
+ .../controllers/customer_threads/helpers/view/view.tpl        | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/admin-dev/themes/default/template/controllers/customer_threads/helpers/view/view.tpl b/admin-dev/themes/default/template/controllers/customer_threads/helpers/view/view.tpl
+index d7f7007..815958a 100644
+--- a/admin-dev/themes/default/template/controllers/customer_threads/helpers/view/view.tpl
++++ b/admin-dev/themes/default/template/controllers/customer_threads/helpers/view/view.tpl
+@@ -97,7 +97,7 @@
+ 	</div>
+ </div>
+ <div class="panel">
+-	<h3 id="reply-form-title">{l s="Your answer to" d='Admin.Orderscustomers.Feature'} {if isset($customer->firstname)}{$customer->firstname|escape:'html':'UTF-8'} {$customer->lastname|escape:'html':'UTF-8'} {else} {$thread->email}{/if}</h3>
++	<h3 id="reply-form-title">{l s="Your answer to" d='Admin.Orderscustomers.Feature'} {if isset($customer->firstname)}{$customer->firstname|escape:'html':'UTF-8'} {$customer->lastname|escape:'html':'UTF-8'} {else} {$thread->email|escape:'html':'UTF-8'}{/if}</h3>
+ 	<form action="{$link->getAdminLink('AdminCustomerThreads', true, [], ['id_customer_thread' => $thread->id|intval, 'viewcustomer_thread' => 1])|escape:'html':'UTF-8'}" method="post" enctype="multipart/form-data" class="form-horizontal">
+ 	<div class="row">
+ 		<div class="media">
+@@ -118,7 +118,7 @@
+ 		-->
+ 		<button class="btn btn-default pull-right" name="submitReply"><i class="process-icon-mail-reply"></i> {l s="Send"}</button>
+ 		<input type="hidden" name="id_customer_thread" value="{$thread->id|intval}" />
+-		<input type="hidden" name="msg_email" value="{$thread->email}" />
++		<input type="hidden" name="msg_email" value="{$thread->email|escape:'html':'UTF-8'}" />
+ 	</div>
+ 	</form>
+ </div>

@@ -1,0 +1,63 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 6 1 * *'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.1', '8.3']
+    name: PHP ${{ matrix.php }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Fetch PrestaShop 1.7.8.11
+        run: |
+          mkdir -p work/shop
+          curl -sSLo work/ps.tar.gz \
+            https://github.com/PrestaShop/PrestaShop/archive/refs/tags/1.7.8.11.tar.gz
+          tar xzf work/ps.tar.gz -C work/shop --strip-components=1
+
+      - name: Probe must FIND the vulnerability on a stock tree
+        run: |
+          set +e
+          php tests/probe.php work/shop
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "::error::probe found nothing on an unpatched tree; the probe is broken"
+            exit 1
+          fi
+
+      - name: Apply the patch
+        run: |
+          cd work/shop
+          patch -p1 -F0 -N -i ../../patches/0001-*.patch < /dev/null
+
+      - name: Probe must now be clean
+        run: php tests/probe.php work/shop
+
+      - name: Regression suite must pass
+        run: php tests/regression.php work/shop
+
+      - name: Re-applying must be refused, not duplicated
+        run: |
+          cd work/shop
+          set +e
+          patch -p1 -F0 -N --dry-run -s -i ../../patches/0001-*.patch < /dev/null
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "::error::an already-patched tree still accepts the patch"
+            exit 1
+          fi
